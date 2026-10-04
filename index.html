@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>个人信息泄露自查工具</title>
+<style>
+  :root{
+    --bg:#0f1115; --card:#181b21; --card2:#1f232b; --line:#2a2f3a;
+    --pri:#4c8dff; --pri2:#3a76e0; --txt:#e8ecf3; --sub:#9aa4b2;
+    --ok:#2ecc71; --warn:#ffb020; --bad:#ff5c5c;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  body{
+    margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    background:radial-gradient(1200px 600px at 50% -10%,#1b2233 0%,var(--bg) 55%);
+    color:var(--txt);min-height:100vh;padding:18px 14px 60px;
+  }
+  .wrap{max-width:520px;margin:0 auto;}
+  .head{display:flex;align-items:center;gap:12px;margin:8px 0 18px;}
+  .logo{width:46px;height:46px;border-radius:14px;
+    background:linear-gradient(135deg,var(--pri),#7b5cff);
+    display:flex;align-items:center;justify-content:center;font-size:24px;
+    box-shadow:0 8px 24px rgba(76,141,255,.35);}
+  .head h1{font-size:19px;margin:0;font-weight:700;}
+  .head p{margin:3px 0 0;font-size:12px;color:var(--sub);}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px;}
+  .tabs{display:flex;background:var(--card2);border-radius:12px;padding:4px;gap:4px;margin-bottom:14px;}
+  .tab{flex:1;text-align:center;padding:10px;border-radius:9px;font-size:14px;color:var(--sub);cursor:pointer;transition:.2s;font-weight:600;}
+  .tab.on{background:var(--pri);color:#fff;box-shadow:0 4px 12px rgba(76,141,255,.35);}
+  label{display:block;font-size:13px;color:var(--sub);margin-bottom:8px;}
+  input{width:100%;padding:14px;border-radius:12px;border:1px solid var(--line);background:var(--card2);
+    color:var(--txt);font-size:15px;outline:none;transition:.2s;}
+  input:focus{border-color:var(--pri);box-shadow:0 0 0 3px rgba(76,141,255,.15);}
+  .btn{width:100%;margin-top:12px;padding:15px;border-radius:12px;border:none;font-size:15px;font-weight:700;
+    color:#fff;background:linear-gradient(135deg,var(--pri),var(--pri2));cursor:pointer;transition:.2s;}
+  .btn:active{transform:scale(.98);}
+  .btn:disabled{opacity:.5;cursor:not-allowed;}
+  .hint{font-size:12px;color:var(--sub);margin-top:10px;line-height:1.6;}
+  .res{margin-top:14px;border-radius:14px;padding:16px;animation:fade .3s;}
+  .res:empty{display:none;padding:0;margin-top:0;border:none;background:none;}
+  @keyframes fade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+  .res.ok{background:rgba(46,204,113,.12);border:1px solid rgba(46,204,113,.4);}
+  .res.bad{background:rgba(255,92,92,.12);border:1px solid rgba(255,92,92,.4);}
+  .res.warn{background:rgba(255,176,32,.12);border:1px solid rgba(255,176,32,.4);}
+  .res h3{margin:0 0 8px;font-size:16px;}
+  .res p{margin:4px 0;font-size:13px;color:var(--sub);line-height:1.6;}
+  .big{font-size:26px;font-weight:800;margin:6px 0;}
+  .ok .big{color:var(--ok);}.bad .big{color:var(--bad);}.warn .big{color:var(--warn);}
+  .disclaimer{font-size:11px;color:var(--sub);line-height:1.7;margin-top:18px;padding:14px;
+    background:var(--card);border:1px dashed var(--line);border-radius:12px;}
+  .spin{display:inline-block;width:15px;height:15px;border:2px solid rgba(255,255,255,.3);
+    border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px;margin-right:6px;}
+  @keyframes sp{to{transform:rotate(360deg);}}
+  .kbadge{display:inline-block;font-size:10px;background:rgba(76,141,255,.15);color:var(--pri);
+    padding:3px 8px;border-radius:20px;margin-left:6px;font-weight:600;vertical-align:middle;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <div class="logo">🔒</div>
+    <div>
+      <h1>个人信息泄露自查工具 <span class="kbadge">k-匿名</span></h1>
+      <p>本地计算 · 只上传前5位哈希 · 完整比对在本地</p>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab on" data-t="pwd">密码</div>
+    <div class="tab" data-t="strength">强度</div>
+    <div class="tab" data-t="phone">手机号</div>
+    <div class="tab" data-t="breach">科普</div>
+  </div>
+
+  <!-- 密码检测 -->
+  <div class="card" id="panePwd">
+    <label>输入要检测的密码（本地计算，不会上传明文）</label>
+    <input type="password" id="pwdInput" placeholder="输入密码，点检测" autocomplete="off">
+    <button class="btn" id="pwdBtn">开始检测</button>
+    <div class="res" id="pwdRes"></div>
+    <div class="hint">
+      🔐 原理：本地对密码做 SHA-1 哈希 → 只把前 5 位发给 HIBP 服务器 →
+      服务器返回该前缀对应的所有泄露记录 → 你在本地比对后 35 位。
+      服务器**永远不知道你的完整密码或完整哈希**。
+    </div>
+  </div>
+
+  <!-- 密码强度评估 -->
+  <div class="card" id="paneStrength" style="display:none">
+    <label>输入密码，实时评估强度（本地计算，不上传、不联网）</label>
+    <input type="password" id="strInput" placeholder="边输边看强度" autocomplete="off">
+    <div id="strMeter" style="margin:10px 0 4px">
+      <div style="height:10px;border-radius:6px;background:#2a2f3a;overflow:hidden">
+        <div id="strBar" style="height:100%;width:0%;background:#e5534b;transition:width .25s,background .25s"></div>
+      </div>
+    </div>
+    <div class="res" id="strRes"></div>
+    <div class="hint">
+      🧪 <b>评分 0–4（借鉴 zxcvbn 思路，本地实现）：</b>
+      0 太弱 / 1 很弱 / 2 一般 / 3 安全 / 4 极强。
+      会识别常见密码、键盘序(qwerty)、重复(aaa)、顺子(abcd)、纯数字、年份等套路，并估算破解时间。
+    </div>
+  </div>
+
+  <!-- 手机号检测 -->
+  <div class="card" id="panePhone" style="display:none">
+    <label>输入要检测的手机号（本地分析，不会上传）</label>
+
+    <!-- 国内 / 国外 / 不确定 切换 -->
+    <div class="seg" style="display:flex;gap:0;margin:8px 0;border:1px solid #2a2f3a;border-radius:8px;overflow:hidden">
+      <span class="segbtn on" id="segCN" style="flex:1;text-align:center;padding:8px 0;cursor:pointer;font-size:13px;background:#2a2f3a;user-select:none">🇨🇳 国内</span>
+      <span class="segbtn" id="segIntl" style="flex:1;text-align:center;padding:8px 0;cursor:pointer;font-size:13px;background:transparent;user-select:none">🌍 国外</span>
+      <span class="segbtn" id="segAuto" style="flex:1;text-align:center;padding:8px 0;cursor:pointer;font-size:13px;background:transparent;user-select:none">❓ 不确定</span>
+    </div>
+
+    <!-- 国外模式：国家码下拉 -->
+    <select id="ccSelect" style="display:none;width:100%;margin:0 0 8px;padding:10px;border-radius:8px;background:#1f232b;color:#e6e9ee;border:1px solid #2a2f3a;font-size:15px">
+      <option value="">— 请选择国家/地区 —</option>
+    </select>
+
+    <input type="tel" id="phoneInput" placeholder="输入 11 位手机号" inputmode="numeric" maxlength="20" autocomplete="off">
+    <button class="btn" id="phoneBtn">开始检测</button>
+    <div class="res" id="phoneRes"></div>
+    <div class="hint">
+      📱 <b>说明：</b>手机号没有公开的免费泄露查询接口（别信那些要你注册的"查询站"，多数是钓鱼）。
+      本功能做的是<b>本地风险画像</b>：格式校验 + 号段识别 + 虚拟运营商/诈骗高发段提醒 + 隐私弱点自查。<br>
+      🌍 点击上方 <b>「国外」</b> 会展开国家/地区下拉，选好后<b>直接输号码即可，不用手输 + 号</b>；<b>「国内」</b>则按中国大陆 11 位号码检测。<br>
+      ❓ 点击 <b>「不确定」</b>：收到陌生号码、不知道是哪国时用——把号码<b>原样粘贴</b>进来（能带上国家码或 + 最好），系统会<b>自动判断属于哪个国家/地区</b>；若无法唯一确定，会列出几个可能的地区供你参考。<br>
+      全部计算在本机完成，<b>号码不会上传到任何服务器</b>。
+    </div>
+  </div>
+
+  <!-- 泄露科普 -->
+  <div class="card" id="paneBreach" style="display:none">
+    <label>📖 数据泄露科普 · 常见泄露来源与应对</label>
+    <div style="font-size:13px;color:#9aa4b2;line-height:1.9;margin-top:6px">
+      <p><b>一、数据是怎么泄露的？</b></p>
+      <ul style="margin:4px 0 10px 18px;padding:0">
+        <li><b>拖库（数据库泄露）</b>：网站服务器被攻破，整张用户表（账号+密码哈希）被打包下载。HIBP 收录的主要就是这类事件。</li>
+        <li><b>撞库</b>：攻击者拿 A 站泄露的账号密码，去 B 站批量尝试登录——因为很多人「一套密码走天下」。</li>
+        <li><b>钓鱼</b>：伪装成银行/快递/税务的短信或邮件，诱导你主动交出账号、验证码或身份证。</li>
+        <li><b>内鬼 / 第三方</b>：企业员工或外包服务商违规导出数据。</li>
+        <li><b>公开爬取</b>：你在社交平台公开的姓名、电话、单位被批量抓取整合。</li>
+      </ul>
+      <p><b>二、泄露后会发生什么？</b></p>
+      <ul style="margin:4px 0 10px 18px;padding:0">
+        <li>撞库盗号 → 盗刷、发诈骗信息给好友</li>
+        <li>精准诈骗（"你XX平台订单异常"）</li>
+        <li>被冒名注册公司、贷款（需身份证配合）</li>
+        <li>垃圾短信 / 骚扰电话暴增</li>
+      </ul>
+      <p><b>三、自查与止损清单</b></p>
+      <ul style="margin:4px 0 10px 18px;padding:0">
+        <li>✅ 用本工具「密码」标签查密码是否泄露；用「手机号」标签做本地风险画像</li>
+        <li>✅ 重要账号（邮箱/支付/社交）设<b>唯一密码</b>，不与任何网站重复</li>
+        <li>✅ 开启<b>二次验证</b>，优先用 App 令牌（TOTP）而非纯短信</li>
+        <li>✅ 邮箱被泄露 → 立即改密 + 检查转发/过滤规则是否被篡改</li>
+        <li>✅ 查名下被冒名注册公司：「电子营业执照」小程序</li>
+        <li>✅ 查名下贷款/信用卡冒用：央行征信中心 / 「信用中国」</li>
+        <li>🚫 <b>绝不在陌生网站输入「身份证号+姓名+手机号+验证码」</b>，那正是钓鱼套路</li>
+      </ul>
+      <p style="color:#e0a94b"><b>⚠️ 温馨提示：</b>真正的"泄露查询"服务不会要你注册、充值或输入验证码。任何索要验证码的"查询"，都是骗局。</p>
+    </div>
+  </div>
+
+  <div class="disclaimer">
+    <b>⚠️ 免责声明</b><br>
+    本工具仅供个人学习与研究使用，严禁用于商业用途、非法用途或对外分发/上架。
+    查询结果来自公开的 Have I Been Pwned (HIBP) 数据集，我方不对结果准确性作任何担保。
+    使用本工具即表示你已理解并同意：所有查询均由你自愿发起，产生的任何后果由使用者自行承担。
+    请勿输入他人密码进行检测。
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- 工具函数 ----------
+  // SHA-1（纯 JS，本地计算，不依赖任何外部库）
+  function sha1(str){
+    // 处理 UTF-8
+    var utf8 = unescape(encodeURIComponent(str));
+    var words = [];
+    var len = utf8.length;
+    var i;
+    for(i = 0; i < len; i++){
+      words[i >> 2] |= utf8.charCodeAt(i) << ((3 - (i % 4)) * 8);
+    }
+    words[len >> 2] |= 0x80 << ((3 - (len % 4)) * 8);
+    words[(((len + 8) >> 6) + 1) * 16 - 1] = len * 8;
+
+    var H0 = 0x67452301, H1 = 0xEFCDAB89, H2 = 0x98BADCFE, H3 = 0x10325476, H4 = 0xC3D2E1F0;
+
+    function rol(n, s){ return (n << s) | (n >>> (32 - s)); }
+
+    for(i = 0; i < words.length; i += 16){
+      var a = H0, b = H1, c = H2, d = H3, e = H4;
+      var w = [];
+      var j;
+      for(j = 0; j < 16; j++) w[j] = words[i + j] | 0;
+      for(j = 16; j < 80; j++) w[j] = rol(w[j-3] ^ w[j-8] ^ w[j-14] ^ w[j-16], 1);
+
+      for(j = 0; j < 80; j++){
+        var f, k;
+        if(j < 20){ f = (b & c) | ((~b) & d); k = 0x5A827999; }
+        else if(j < 40){ f = b ^ c ^ d; k = 0x6ED9EBA1; }
+        else if(j < 60){ f = (b & c) | (b & d) | (c & d); k = 0x8F1BBCDC; }
+        else { f = b ^ c ^ d; k = 0xCA62C1D6; }
+        var t = (rol(a, 5) + f + e + k + w[j]) | 0;
+        e = d; d = c; c = rol(b, 30); b = a; a = t;
+      }
+      H0 = (H0 + a) | 0; H1 = (H1 + b) | 0; H2 = (H2 + c) | 0;
+      H3 = (H3 + d) | 0; H4 = (H4 + e) | 0;
+    }
+
+    function hex(n){
+      var s = (n >>> 0).toString(16).toUpperCase();
+      while(s.length < 8) s = "0" + s;
+      return s;
+    }
+    return hex(H0) + hex(H1) + hex(H2) + hex(H3) + hex(H4);
+  }
+
+  // 请求 HIBP
+  // 关键事实：api.pwnedpasswords.com 官方 API 自带 CORS 头
+  // (access-control-allow-origin: *)，浏览器可【直接请求】，无需任何代理。
+  // 因此优先直连；仅在直连失败（网络环境特殊）时，才兜底尝试代理。
+  var PROXIES = [
+    function(u){ return u; }, // ① 直连（首选）
+    function(u){ return "https://api.allorigins.win/raw?url=" + encodeURIComponent(u); },
+    function(u){ return "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(u); },
+    function(u){ return "https://corsproxy.io/?url=" + encodeURIComponent(u); }
+  ];
+
+  function fetchHibp(url){
+    // 依次尝试：先直连，再逐个公共代理
+    var idx = 0;
+    function tryNext(){
+      if(idx >= PROXIES.length) return Promise.reject(new Error("直连与所有代理均不可用"));
+      var p = PROXIES[idx++];
+      return fetch(p(url), { headers: { "Add-Padding": "true" } })
+        .then(function(r){
+          if(!r.ok) throw new Error("HTTP " + r.status);
+          return r.text();
+        })
+        .catch(function(){ return tryNext(); });
+    }
+    return tryNext();
+  }
+
+  function $(id){ return document.getElementById(id); }
+
+  function showRes(box, type, html){
+    box.className = "res " + type;
+    box.innerHTML = html;
+    box.style.display = "block";
+  }
+
+  // ---------- Tab 切换 ----------
+  var tabs = document.querySelectorAll(".tab");
+  tabs.forEach(function(t){
+    t.addEventListener("click", function(){
+      tabs.forEach(function(x){ x.classList.remove("on"); });
+      t.classList.add("on");
+      var which = t.getAttribute("data-t");
+      $("panePwd").style.display = (which === "pwd") ? "" : "none";
+      $("paneStrength").style.display = (which === "strength") ? "" : "none";
+      $("panePhone").style.display = (which === "phone") ? "" : "none";
+      $("paneBreach").style.display = (which === "breach") ? "" : "none";
+    });
+  });
+
+  // ---------- 密码检测 ----------
+  var lastQuery = 0;
+  var MIN_INTERVAL = 3000;
+
+  $("pwdBtn").addEventListener("click", function(){
+    var pwd = $("pwdInput").value;
+    var box = $("pwdRes");
+    if(!pwd){ showRes(box, "warn", "<h3>请输入密码</h3><p>请先输入要检测的密码。</p>"); return; }
+
+    var now = Date.now();
+    if(now - lastQuery < MIN_INTERVAL){
+      var wait = Math.ceil((MIN_INTERVAL - (now - lastQuery)) / 1000);
+      showRes(box, "warn", "<h3>操作过于频繁</h3><p>请等 " + wait + " 秒后再试（防止对公共服务造成压力）。</p>");
+      return;
+    }
+    lastQuery = now;
+
+    var btn = $("pwdBtn");
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spin"></span>查询中…';
+
+    try{
+      var full = sha1(pwd);              // 完整 40 位 SHA-1
+      var prefix = full.substring(0, 5); // 只上传前 5 位
+      var suffix = full.substring(5);    // 后 35 位仅在本地比对
+
+      fetchHibp("https://api.pwnedpasswords.com/range/" + prefix)
+        .then(function(text){
+          // 解析响应：每行 "SUFFIX:COUNT"
+          var lines = text.split(/\r?\n/);
+          var count = 0;
+          for(var i = 0; i < lines.length; i++){
+            var parts = lines[i].split(":");
+            if(parts.length === 2 && parts[0].trim().toUpperCase() === suffix){
+              count = parseInt(parts[1], 10) || 0;
+              break;
+            }
+          }
+          if(count > 0){
+            showRes(box, "bad",
+              "<h3>⚠️ 该密码已泄露！</h3>" +
+              '<div class="big">' + count.toLocaleString() + ' 次</div>' +
+              "<p>这个密码在已知的数据泄露事件中出现过 <b>" + count.toLocaleString() + "</b> 次。</p>" +
+              "<p>强烈建议你立即停用该密码，并为所有重要账号设置唯一且高强度的密码。</p>");
+          }else{
+            showRes(box, "ok",
+              "<h3>✅ 未发现泄露</h3>" +
+              '<div class="big">安全</div>' +
+              "<p>该密码未出现在已知泄露数据库中。</p>" +
+              "<p>提示：未泄露 ≠ 绝对安全，仍建议定期更换并使用密码管理器。</p>");
+          }
+        })
+        .catch(function(err){
+          showRes(box, "warn",
+            "<h3>查询失败</h3>" +
+            "<p>" + (err && err.message ? err.message : "网络异常") + "</p>" +
+            "<p>可能是公共代理暂时不可用，请稍后重试。</p>");
+        })
+        .then(function(){
+          btn.disabled = false;
+          btn.textContent = "开始检测";
+        });
+    }catch(e){
+      showRes(box, "warn", "<h3>本地计算异常</h3><p>" + e.message + "</p>");
+      btn.disabled = false;
+      btn.textContent = "开始检测";
+    }
+  });
+
+  // ---------- 手机号检测（本地风险画像） ----------
+  // 说明：手机号没有公开免费泄露接口，这里做的是"本地风险分析"。
+  var SEG = {
+    // 虚拟运营商（诈骗/营销电话高发，建议开启防骚扰）
+    "170":"虚拟运营商（虚拟号段，诈骗/骚扰高发）",
+    "171":"虚拟运营商（虚拟号段，诈骗/骚扰高发）",
+    "162":"虚拟运营商（虚拟号段）",
+    "165":"虚拟运营商（虚拟号段）",
+    "167":"虚拟运营商（虚拟号段）",
+    "172":"虚拟运营商（虚拟号段）",
+    // 物联网/专用号段
+    "140":"物联网/专用号段",
+    "141":"物联网/专用号段",
+    "142":"物联网/专用号段",
+    "143":"物联网/专用号段",
+    "144":"物联网/专用号段",
+    "146":"物联网/专用号段",
+    "148":"物联网/专用号段",
+    "149":"物联网/专用号段"
+  };
+
+  function phoneSegmentInfo(num){
+    var p = num.substring(0, 3);
+    if(SEG[p]) return { known:true, desc:SEG[p], risk:(p.substring(0,2)==="17"?"⚠️":"ℹ️") };
+    return { known:false, desc:"普通号段（移动/联通/电信三网之一）", risk:"✅" };
+  }
+
+  // ---------- 国际号码：常见国家/地区识别表（纯本地，不联网） ----------
+  // risk 档位基于公开常识：该国是否存在大量网络电话(VoIP)/虚拟号段、
+  // 是否为跨境诈骗/骚扰电话高发来源。仅为"来电心理预警"，非号码黑名单。
+  // 匹配规则：取最长匹配的国家码（如 +1 与 +1xxx 并存时优先长码）。
+  var CCTL = [
+    { cc:"86",  name:"中国大陆", len:11, risk:"中", note:"国内骚扰/营销电话较多，建议开启运营商拦截" },
+    { cc:"852", name:"中国香港", len:8,  risk:"中", note:"境外来电中常见，留意网络电话(VoIP)呼出" },
+    { cc:"853", name:"中国澳门", len:8,  risk:"低", note:"相对平稳" },
+    { cc:"886", name:"中国台湾", len:9,  risk:"中", note:"常见假冒客服/快递的诈骗来电" },
+    { cc:"1",   name:"美国/加拿大", len:10, risk:"中", note:"VoIP 与自动外呼(robocall)极多，陌生来电勿轻信" },
+    { cc:"81",  name:"日本", len:10, risk:"低", note:"相对平稳，留意伪装成宅配/银行的短信" },
+    { cc:"82",  name:"韩国", len:10, risk:"低", note:"相对平稳" },
+    { cc:"65",  name:"新加坡", len:8,  risk:"中", note:"金融相关冒充来电/短信较多" },
+    { cc:"60",  name:"马来西亚", len:9,  risk:"高", note:"跨境诈骗（冒充公检法/投资）高发来源之一" },
+    { cc:"66",  name:"泰国", len:9,  risk:"中", note:"旅游/投资类诈骗话术常见" },
+    { cc:"84",  name:"越南", len:9,  risk:"高", note:"跨境诈骗、杀猪盘话术常见来源" },
+    { cc:"63",  name:"菲律宾", len:10, risk:"高", note:"菠菜(博彩)与客服类骚扰电话高发来源" },
+    { cc:"62",  name:"印度尼西亚", len:10, risk:"中", note:"投资/贷款类诈骗短信较多" },
+    { cc:"91",  name:"印度", len:10, risk:"高", note:"冒充客服/微软/银行的国际诈骗电话高发来源" },
+    { cc:"92",  name:"巴基斯坦", len:10, risk:"中", note:"陌生来电需警惕" },
+    { cc:"7",   name:"俄罗斯/哈萨克", len:10, risk:"中", note:"投资/加密币类诈骗话术偶发" },
+    { cc:"44",  name:"英国", len:10, risk:"中", note:"冒充银行/HMRC 的钓鱼短信较多" },
+    { cc:"49",  name:"德国", len:11, risk:"低", note:"相对平稳" },
+    { cc:"33",  name:"法国", len:9,  risk:"低", note:"相对平稳" },
+    { cc:"234", name:"尼日利亚", len:10, risk:"高", note:"国际诈骗邮件/电话(419 骗局)的经典高发来源，陌生来电务必警惕" },
+    { cc:"233", name:"加纳", len:9,  risk:"高", note:"跨国婚恋/投资诈骗高发来源之一" }
+  ];
+
+  var RISK_ORDER = { "低":0, "中":1, "高":2 };
+  var RISK_EMOJI = { "低":"✅", "中":"ℹ️", "高":"⚠️" };
+
+  // 输入清洗：去掉空格、短横线、括号，保留开头的 +
+  function cleanPhone(s){
+    s = s.replace(/[\s\-\(\)\.]/g, "");
+    return s;
+  }
+
+  // 自动识别：用户粘贴完整号码（可能带 +），猜测国家/地区
+  // 返回 { ok, cc, name, national, lenOk, candidates:[{cc,name}] }
+  function guessCountry(raw){
+    var digits = raw.replace(/^\+/, "").replace(/\D/g, "");
+    if(!digits) return { ok:false, candidates:[] };
+    // 依次尝试每个国家码（长度从长到短，优先长码匹配），并校验号码位数
+    var cands = [];
+    for(var i = 0; i < CCTL.length; i++){
+      var e = CCTL[i];
+      if(digits.indexOf(e.cc) === 0 && digits.length > e.cc.length){
+        var nat = digits.substring(e.cc.length);
+        // 位数在 [len-2, len+2] 视为合理候选，完全相符的排前面
+        var diff = Math.abs(nat.length - e.len);
+        cands.push({ cc:e.cc, name:e.name, len:e.len, national:nat, diff:diff });
+      }
+    }
+    if(cands.length === 0) return { ok:false, candidates:[] };
+    // 排序：位数完全匹配 > 位数接近 > 码更长的
+    cands.sort(function(a, b){
+      if(a.diff !== b.diff) return a.diff - b.diff;
+      return b.cc.length - a.cc.length;
+    });
+    var exact = cands.filter(function(c){ return c.diff === 0; });
+    // 恰好只有一个"位数完全匹配"结果 → 确定；否则视为歧义，交给上层展示候选
+    if(exact.length === 1){
+      var b = exact[0];
+      return { ok:true, cc:b.cc, name:b.name, national:b.national, lenOk:true, candidates:cands };
+    }
+    if(exact.length > 1){
+      return { ok:false, ambiguous:true, candidates:exact };
+    }
+    // 没有任何"位数完全匹配"，但存在接近的候选 → 也交给上层列出
+    return { ok:false, ambiguous:true, candidates:cands.slice(0, 5) };
+  }
+
+
+  function identifyCountry(raw){
+    var cc = raw.replace(/^\+/, "");
+    var best = null;
+    for(var i = 0; i < CCTL.length; i++){
+      var e = CCTL[i];
+      if(cc.indexOf(e.cc) === 0){
+        if(!best || e.cc.length > best.cc.length) best = e;
+      }
+    }
+    if(!best) return { ok:false };
+    var national = cc.substring(best.cc.length);
+    return {
+      ok:true, cc:best.cc, name:best.name, risk:best.risk,
+      note:best.note, national:national,
+      lenOk:(national.length === best.len)
+    };
+  }
+
+  // ---------- 通用防护建议（中国/国外结果共用） ----------
+  function commonChecklist(){
+    return "<p style='margin-top:10px'><b>通用自查清单：</b></p>" +
+      "<ul style='margin:6px 0 0 18px;padding:0;font-size:13px;color:#9aa4b2;line-height:1.8'>" +
+      "<li>是否在多个平台用<b>同一个手机号+同一套密码</b>？（撞库风险）</li>" +
+      "<li>是否长期未更换过<b>短信验证码</b>接收号码？</li>" +
+      "<li>重要账号是否开启<b>二次验证</b>（尽量用 App 令牌而非纯短信）？</li>" +
+      "<li>是否点过陌生短信里的链接 / 回复过『退订』以外的内容？</li>" +
+      "</ul>";
+  }
+
+  // ---------- 国内/国外 切换 + 国家码下拉（无需手输 + 号） ----------
+  // 当前模式："cn" 国内 | "intl" 国外 | "auto" 不确定（自动识别）
+  var phoneMode = "cn";
+
+  // 用 CCTL 表填充国家/地区下拉框
+  (function fillCCSelect(){
+    var sel = $("ccSelect");
+    if(!sel) return;
+    for(var i = 0; i < CCTL.length; i++){
+      var e = CCTL[i];
+      var opt = document.createElement("option");
+      opt.value = e.cc;
+      opt.textContent = "＋" + e.cc + "  " + e.name;
+      sel.appendChild(opt);
+    }
+  })();
+
+  function setPhoneMode(mode){
+    phoneMode = mode;
+    var onCN   = (mode === "cn");
+    var onIntl = (mode === "intl");
+    // 切换按钮高亮
+    $("segCN").style.background   = onCN   ? "#2a2f3a" : "transparent";
+    $("segIntl").style.background = onIntl ? "#2a2f3a" : "transparent";
+    $("segAuto").style.background = (mode === "auto") ? "#2a2f3a" : "transparent";
+    $("segCN").classList.toggle("on", onCN);
+    $("segIntl").classList.toggle("on", onIntl);
+    $("segAuto").classList.toggle("on", mode === "auto");
+    // 下拉框仅在"国外"模式显示
+    $("ccSelect").style.display = onIntl ? "block" : "none";
+    // 输入框提示与键盘
+    var input = $("phoneInput");
+    if(onCN){
+      input.placeholder = "输入 11 位手机号";
+    }else if(onIntl){
+      input.placeholder = "输入号码（不用带 + 号）";
+    }else{
+      input.placeholder = "粘贴完整号码，含国家码（如 +1 2025550123）";
+    }
+    input.setAttribute("inputmode", "tel");
+    input.maxLength = 20;
+    input.value = "";
+    $("phoneRes").className = "res";
+    $("phoneRes").innerHTML = "";
+  }
+
+  $("segCN").addEventListener("click", function(){ setPhoneMode("cn"); });
+  $("segIntl").addEventListener("click", function(){ setPhoneMode("intl"); });
+  $("segAuto").addEventListener("click", function(){ setPhoneMode("auto"); });
+
+  $("phoneBtn").addEventListener("click", function(){
+    var val = cleanPhone($("phoneInput").value);
+    var box = $("phoneRes");
+
+    if(!val){
+      var emptyMsg = phoneMode === "cn" ? "请输入中国大陆 11 位手机号。"
+                   : phoneMode === "intl" ? "请先选择国家/地区，再输入号码（不用带 + 号）。"
+                   : "请粘贴完整号码（尽量带上国家码，如 +1 2025550123）。";
+      showRes(box, "warn", "<h3>请输入手机号</h3><p>" + emptyMsg + "</p>"); return;
+    }
+
+    // 根据当前模式构造 raw：国内=纯数字；国外=下拉选的国家码 + 号码；不确定=自动识别
+    var raw;
+    if(phoneMode === "cn"){
+      // 兼容：如果用户仍手输了 +86 或开头 86，去掉
+      raw = val.replace(/^\+/, "");
+      if(raw.indexOf("86") === 0 && raw.length > 11) raw = raw.substring(2);
+    }else if(phoneMode === "intl"){
+      var cc = $("ccSelect").value;
+      if(!cc){ showRes(box, "warn", "<h3>请先选择国家/地区</h3><p>点击上方下拉框选择号码所属的国家或地区。</p>"); return; }
+      // 若用户已经手输了 + 号，则直接用；否则自动补 +
+      if(/^\+?\d+$/.test(val)){
+        raw = "+" + cc + val.replace(/^\+/, "");
+      }else{
+        showRes(box, "warn", "<h3>格式错误</h3><p>号码只能包含数字，请去掉字母或符号后重试。</p>"); return;
+      }
+    }else{
+      // ===== 不确定模式：自动识别国家 =====
+      var hasPlus = /^\+/.test(val);
+      var digitsOnly = val.replace(/\D/g, "");
+      if(!digitsOnly){
+        showRes(box, "warn", "<h3>格式错误</h3><p>号码只能包含数字，请去掉字母或符号后重试。</p>"); return;
+      }
+      // 若用户带了 + 或号码明显以某国码开头，则直接按国际号码尝试识别
+      var guess = guessCountry(hasPlus ? ("+" + digitsOnly) : digitsOnly);
+      if(guess.ok){
+        // 唯一确定 → 构造 + 号码，走国际分支
+        raw = "+" + guess.cc + guess.national;
+      }else if(guess.ambiguous){
+        // 多个候选 → 提示用户，并列出可能是哪几个国家
+        var lis = "";
+        for(var ci = 0; ci < guess.candidates.length; ci++){
+          var cd = guess.candidates[ci];
+          lis += "<li>+" + cd.cc + " <b>" + cd.name + "</b>（当地号码 " + cd.len + " 位）</li>";
+        }
+        showRes(box, "warn",
+          "<h3>❓ 无法唯一确定国家</h3>" +
+          "<p>这个号码可能属于以下地区，请你根据来电来源确认：</p>" +
+          "<ul style='margin:6px 0 0 18px;padding:0;font-size:13px;color:#9aa4b2;line-height:1.9'>" + lis + "</ul>" +
+          "<p style='color:#9aa4b2;font-size:12px'>提示：如果号码以 <b>0</b> 或 <b>00</b> 开头，请忽略前面的 0/00，从国家码开始看。也可以切到「🌍 国外」手动选国家更准确。</p>");
+        return;
+      }else{
+        // 一个都不匹配 → 本地库未覆盖
+        showRes(box, "warn",
+          "<h3>暂不支持该号码</h3>" +
+          "<p>本地号码库未能识别这个号码的国家/地区。本工具目前覆盖约 20 个常见国家和地区（中国、美加、日本、韩国、港澳台、新加坡、马来西亚、泰国、越南、菲律宾、印尼、印度、巴基斯坦、俄罗斯、英国、德国、法国、尼日利亚、加纳等）。</p>" +
+          "<p style='color:#9aa4b2;font-size:12px'>若你知道是哪国，可切到「🌍 国外」手动选择国家码再检测。</p>");
+        return;
+      }
+    }
+
+    // 判断是否带国际区号（+ 开头）
+    var isIntl = /^\+/.test(raw);
+
+    // ================= 分支一：中国号码（无 + 或 +86）走原有本地逻辑 =================
+    if(!isIntl || /^\+86/.test(raw)){
+      var cn = raw.replace(/^\+86/, ""); // +86 开头时去掉区号
+      if(!/^\d+$/.test(cn)){
+        showRes(box, "warn", "<h3>格式错误</h3><p>手机号只能包含数字，请去掉字母或符号后重试。</p>"); return;
+      }
+      if(cn.length !== 11){
+        showRes(box, "warn", "<h3>位数不对</h3><p>中国大陆手机号为 11 位，你输入了 " + cn.length + " 位。若是国外号码，请在前面加上 + 国家码。</p>"); return;
+      }
+      if(cn.substring(0,1) !== "1"){
+        showRes(box, "warn", "<h3>号段错误</h3><p>中国大陆手机号以 1 开头。</p>"); return;
+      }
+      if(!/^1[3-9]\d{9}$/.test(cn)){
+        showRes(box, "warn", "<h3>不是有效号段</h3><p>该号码不属于常见的移动电话号段（1[3-9] 开头）。</p>"); return;
+      }
+
+      // ---- 本地分析 ----
+      var masked = cn.substring(0,3) + "****" + cn.substring(7);
+      var seg = phoneSegmentInfo(cn);
+
+      // 弱隐私特征自查（纯本地，不存储）
+      var weak = [];
+      var tail4 = cn.substring(7);
+      if(/^(\d)\1{3}$/.test(tail4)) weak.push("尾号四位完全相同（如 8888），易被猜测/记忆");
+      if(/^(1234|2345|3456|4567|5678|6789|9876|8765|7654|6543|5432|4321)$/.test(tail4)) weak.push("尾号四位为连续顺子，规律性强");
+      if(cn.substring(3,7) === "0000") weak.push("中间四位为 0000，常见于资料填写随意/测试号");
+      if(/^1\d0\d{8}$/.test(cn)) weak.push("含较多 0，号码规律性偏强");
+
+      var html = "<h3>📱 手机号风险画像</h3>" +
+        "<p style='color:#9aa4b2;font-size:13px;margin:0 0 8px'>地区：🇨🇳 中国大陆</p>" +
+        '<div class="big" style="font-size:20px">' + masked + "</div>" +
+        "<p><b>号段判定：</b>" + seg.risk + " " + seg.desc + "</p>";
+
+      var level = "ok";
+      if(!seg.known && weak.length === 0){
+        html += "<p>未发现明显风险特征。普通号段建议：开启运营商短信内容拦截 + 手机系统骚扰拦截。</p>";
+        html += "<p style='color:#9aa4b2'>提示：本结果基于号段规则与常见泄露套路，<b>并非数据库比对</b>。真正查『是否被泄露』需正规渠道，切勿在陌生网站输入手机号验证码。</p>";
+      }else{
+        if(seg.known){ level = "warn"; }
+        if(weak.length > 0){ level = "warn"; }
+        html += "<p><b>风险提示：</b></p><ul style='margin:6px 0 0 18px;padding:0;font-size:13px;color:#9aa4b2;line-height:1.8'>";
+        if(seg.known) html += "<li>该号为虚拟/专用号段，是<b>诈骗电话与营销短信高发区</b>，建议开启运营商层面的骚扰拦截。</li>";
+        for(var k = 0; k < weak.length; k++){ html += "<li>" + weak[k] + "</li>"; }
+        html += "</ul>";
+      }
+
+      html += commonChecklist();
+      showRes(box, level, html);
+      return;
+    }
+
+    // ================= 分支二：国外号码（+ 国家码）走国家识别 + 风险画像 =================
+    var digits = raw.replace(/^\+/, "");
+    if(!/^\d+$/.test(digits)){
+      showRes(box, "warn", "<h3>格式错误</h3><p>国际号码应为 + 后跟数字，如 +1 2025550123。</p>"); return;
+    }
+
+    var info = identifyCountry(raw);
+    if(!info.ok){
+      showRes(box, "warn", "<h3>暂不支持该地区</h3><p>未能识别这个国家/地区代码。本工具目前覆盖常见约 20 个国家/地区（中国、美加、日本、韩国、香港、台湾、新加坡、马来西亚、泰国、越南、菲律宾、印尼、印度、巴基斯坦、俄罗斯、英国、德国、法国、尼日利亚、加纳等）。</p>");
+      return;
+    }
+
+    // 掩码：保留国家码 + 末 4 位
+    var ccShow = "+" + info.cc + " ";
+    var natTail = info.national.length > 4 ? info.national.slice(-4) : info.national;
+    var maskedIntl = ccShow + "****" + natTail;
+
+    var lvlMap = { "低":"ok", "中":"warn", "高":"warn" };
+    var level = lvlMap[info.risk] || "warn";
+
+    var h = "<h3>🌍 国际号码地区画像</h3>" +
+      "<p style='color:#9aa4b2;font-size:13px;margin:0 0 8px'>地区识别：<b>" + info.name + "</b>（+" + info.cc + "）</p>" +
+      '<div class="big" style="font-size:20px">' + maskedIntl + "</div>" +
+      "<p><b>本地风险档位：</b>" + (RISK_EMOJI[info.risk] || "") + " " + info.risk + "</p>" +
+      "<p><b>说明：</b>" + info.note + "</p>";
+
+    if(!info.lenOk){
+      h += "<p style='color:#e0a24a'><b>格式提示：</b>" + info.name + " 的国家号码通常为 " + (info.national.length ? info.national.length : "?") + " 位（不含区号），你输入的国家部分为 " + info.national.length + " 位，请核对。不同运营商可能有差异，仅供参考。</p>";
+    }
+
+    h += "<p style='margin-top:10px'><b>来电/短信防护建议：</b></p>" +
+      "<ul style='margin:6px 0 0 18px;padding:0;font-size:13px;color:#9aa4b2;line-height:1.8'>" +
+      "<li>陌生<b>国际来电</b>若自称国内公检法/银行/使领馆，几乎都是诈骗，直接挂断。</li>" +
+      "<li>不要因对方报出你的部分信息就相信，泄露信息常被用来<b>降低戒心</b>。</li>" +
+      "<li>不开屏幕共享、不按对方指示转账、不下载对方指定的 App。</li>" +
+      "<li>可疑来电可向手机系统/运营商标记举报。</li>" +
+      "</ul>";
+
+    h += "<p style='color:#9aa4b2;font-size:12px'>⚠️ 本结果仅为基于号段的<b>地区识别与常识性风险画像</b>，<b>不是号码黑名单，也不对某个具体号码打诈骗分</b>。任何机构都无法凭号段断定单个号码是否诈骗。</p>";
+
+    h += commonChecklist();
+    showRes(box, level, h);
+  });
+
+  // ---------- 密码强度评估（借鉴 zxcvbn 思路，纯本地精简实现） ----------
+  // 说明：不引入 zxcvbn 库（gzip 后仍有数百 KB），用原生 JS 实现核心逻辑：
+  //   ① 常见密码 / 人名 / 年份 / 键盘序 / 重复 / 顺子 / l33t 识别
+  //   ② 评分 0-4（zxcvbn 五档）③ 破解时间估算（4 种场景，输出人话）④ 文字反馈
+  var COMMON = ("123456,password,12345678,qwerty,123456789,12345,1234,111111,1234567,dragon,123123,baseball,abc123,football,monkey,letmein," +
+    "696969,shadow,master,666666,qwertyuiop,123321,mustang,1234567890,michael,654321,superman,1qaz2wsx,7777777,121212,000000," +
+    "qazwsx,123qwe,killer,trustno1,jordan,jennifer,zxcvbnm,asdfgh,hunter,buster,soccer,harley,batman,andrew,tigger,sunshine,iloveyou," +
+    "fuckme,2000,charlie,robert,thomas,hockey,ranger,daniel,starwars,klaster,112233,george,computer,michelle,jessica,pepper,1111,zxcvbn," +
+    "555555,11111111,131313,freedom,777777,pass,aaaaaa,ginger,princess,joshua,cheese,amanda,summer,love,ashley,nicole,chelsea,biteme," +
+    "matthew,access,yankees,987654321,dallas,austin,thunder,taylor,matrix,admin,admin123,root,toor,passw0rd,p@ssw0rd,woaini,5201314," +
+    "111111111,888888,666888,123456a,123456789a,abcdef,abcdefg,admin888,qq123456,aa123456,a123456").split(",");
+
+  // 键盘相邻序列（用于识别 qwerty 类套路）
+  var KB_ROWS = ["1234567890", "qwertyuiop", "asdfghjkl", "zxcvbnm"];
+  function isKeyboardSeq(s){
+    s = s.toLowerCase();
+    if(s.length < 4) return false;
+    for(var r = 0; r < KB_ROWS.length; r++){
+      var row = KB_ROWS[r];
+      var rev = row.split("").reverse().join("");
+      if(row.indexOf(s) >= 0 || rev.indexOf(s) >= 0) return true;
+    }
+    return false;
+  }
+
+  // 判断是否为"顺子/递增递减序"（如 abcd、4321）
+  function isSequence(s){
+    s = s.toLowerCase();
+    if(s.length < 4) return false;
+    var asc = true, desc = true;
+    for(var i = 1; i < s.length; i++){
+      if(s.charCodeAt(i) - s.charCodeAt(i-1) !== 1) asc = false;
+      if(s.charCodeAt(i-1) - s.charCodeAt(i) !== 1) desc = false;
+    }
+    return asc || desc;
+  }
+
+  // 判断是否为重复字符（如 aaa、1111）
+  function isRepeat(s){
+    return s.length > 0 && /^(.)\1+$/.test(s);
+  }
+
+  // l33t 还原：把常见替换字符还原后，再判定是否命中常见密码
+  function deLeet(s){
+    return s.toLowerCase()
+      .replace(/4/g, "a").replace(/@/g, "a")
+      .replace(/3/g, "e").replace(/1/g, "i").replace(/!/g, "i")
+      .replace(/0/g, "o").replace(/\$/g, "s").replace(/5/g, "s")
+      .replace(/7/g, "t").replace(/8/g, "b").replace(/9/g, "g");
+  }
+
+  // 人话化：把秒数转成可读的破解时间
+  function humanTime(sec){
+    if(sec < 1) return "瞬间";
+    var m = sec / 60, h = m / 60, d = h / 24, y = d / 365;
+    if(sec < 60) return Math.round(sec) + " 秒";
+    if(m < 60) return Math.round(m) + " 分钟";
+    if(h < 24) return Math.round(h) + " 小时";
+    if(d < 30) return Math.round(d) + " 天";
+    if(y < 1) return Math.round(d / 30) + " 个月";
+    if(y < 100) return Math.round(y) + " 年";
+    if(y < 1e6) return Math.round(y / 100) / 10 + " 千年";
+    return "几百万年以上";
+  }
+
+  // 核心评估函数：返回 zxcvbn 风格的 {score, guesses, times, warn, tips}
+  function evalStrength(pwd){
+    var tips = [], warns = [];
+    if(!pwd) return null;
+
+    // 1) 计算字符空间基数
+    var space = 0;
+    if(/[a-z]/.test(pwd)) space += 26;
+    if(/[A-Z]/.test(pwd)) space += 26;
+    if(/[0-9]/.test(pwd)) space += 10;
+    if(/[^A-Za-z0-9]/.test(pwd)) space += 33;
+    if(space === 0) space = 26;
+
+    // 2) 基础猜测数 = 基数^长度（上限防止溢出）
+    var guesses = Math.pow(space, pwd.length);
+    if(!isFinite(guesses) || guesses > 1e18) guesses = 1e18;
+
+    // 3) 套路惩罚（大幅降低猜测数）
+    var lower = pwd.toLowerCase();
+    var hitCommon = COMMON.indexOf(lower) >= 0 || COMMON.indexOf(deLeet(pwd)) >= 0;
+    if(hitCommon){
+      guesses = Math.min(guesses, 10);
+      warns.push("这是一个极其常见的密码（或它的变形），几乎等于没设密码。");
+    }
+    if(isRepeat(pwd)){
+      guesses = Math.min(guesses, 100);
+      warns.push("密码是重复字符（如 aaa、1111），很容易被规则化破解。");
+    }
+    if(isSequence(pwd)){
+      guesses = Math.min(guesses, 100);
+      warns.push("密码是连续顺子（如 abcd、4321），属于弱密码。");
+    }
+    if(isKeyboardSeq(pwd)){
+      guesses = Math.min(guesses, 1000);
+      warns.push("密码是键盘相邻序列（如 qwerty、asdf），属于弱密码。");
+    }
+    if(/^\d+$/.test(pwd)){
+      guesses = Math.min(guesses, Math.pow(10, pwd.length));
+      warns.push("纯数字密码，容易被暴力枚举。");
+    }
+    if(/^(19|20)\d{2}$/.test(pwd)){
+      guesses = Math.min(guesses, 100);
+      warns.push("密码是年份，极易被猜到。");
+    }
+
+    // 4) 映射到 zxcvbn 的 score 0-4
+    var score;
+    if(guesses < 1e3) score = 0;
+    else if(guesses < 1e6) score = 1;
+    else if(guesses < 1e8) score = 2;
+    else if(guesses < 1e10) score = 3;
+    else score = 4;
+
+    // 5) 破解时间（4 种场景，借鉴 zxcvbn）
+    var times = {
+      online_throttling: guesses / (100 / 3600),   // 限速 100 次/小时
+      online_slow: guesses / 10,                    // 不限速 10 次/秒
+      offline_slow: guesses / 1e4,                  // 慢哈希 1万次/秒
+      offline_fast: guesses / 1e10                  // 快哈希（GPU）100亿次/秒
+    };
+
+    // 6) 文字反馈（改进建议）
+    if(pwd.length < 8) tips.push("长度至少 12 位更安全（长度比复杂度更重要）。");
+    if(!/[A-Z]/.test(pwd)) tips.push("加入大写字母。");
+    if(!/[a-z]/.test(pwd)) tips.push("加入小写字母。");
+    if(!/[0-9]/.test(pwd)) tips.push("加入数字。");
+    if(!/[^A-Za-z0-9]/.test(pwd)) tips.push("加入符号（如 !@#$%）能显著提升强度。");
+    if(/^[A-Za-z]+$/.test(pwd)) tips.push("避免纯字母，容易被字典破解。");
+    // 去重
+    tips = tips.filter(function(v, i){ return tips.indexOf(v) === i; });
+    if(tips.length === 0 && score >= 3) tips.push("很不错！继续保持每个账号使用唯一密码。");
+    if(tips.length === 0) tips.push("可以再加长一点、混入符号。");
+
+    return { score: score, guesses: guesses, times: times, warns: warns, tips: tips };
+  }
+
+  var SCORE_INFO = [
+    { t: "0 · 太弱",   c: "#e5534b", w: "20%"  },
+    { t: "1 · 很弱",   c: "#e5534b", w: "35%"  },
+    { t: "2 · 一般",   c: "#e0a94b", w: "60%"  },
+    { t: "3 · 安全",   c: "#3fb950", w: "82%"  },
+    { t: "4 · 极强",   c: "#3fb950", w: "100%" }
+  ];
+
+  $("strInput").addEventListener("input", function(){
+    var pwd = this.value;
+    var bar = $("strBar");
+    var box = $("strRes");
+    if(!pwd){
+      bar.style.width = "0%";
+      box.className = "res";
+      box.innerHTML = "";
+      return;
+    }
+    var r = evalStrength(pwd);
+    var info = SCORE_INFO[r.score];
+    bar.style.width = info.w;
+    bar.style.background = info.c;
+
+    var html = "<h3 style='color:" + info.c + "'>强度评分：" + info.t + "</h3>";
+    // 破解时间（4 场景）
+    html += "<p><b>估算破解时间：</b></p>" +
+      "<ul style='margin:4px 0 8px 18px;padding:0;font-size:13px;color:#9aa4b2;line-height:1.8'>" +
+      "<li>在线限速攻击（100次/时）：<b>" + humanTime(r.times.online_throttling) + "</b></li>" +
+      "<li>在线不限速（10次/秒）：<b>" + humanTime(r.times.online_slow) + "</b></li>" +
+      "<li>离线慢哈希（1万次/秒）：<b>" + humanTime(r.times.offline_slow) + "</b></li>" +
+      "<li>离线快哈希/GPU（100亿次/秒）：<b>" + humanTime(r.times.offline_fast) + "</b></li>" +
+      "</ul>";
+    // 风险提示
+    if(r.warns.length){
+      html += "<p style='color:#e5534b'><b>⚠️ 风险提示：</b></p><ul style='margin:4px 0 8px 18px;padding:0;font-size:13px;color:#9aa4b2;line-height:1.8'>";
+      r.warns.forEach(function(w){ html += "<li>" + w + "</li>"; });
+      html += "</ul>";
+    }
+    // 改进建议
+    html += "<p style='color:#e0a94b'><b>💡 改进建议：</b></p><ul style='margin:4px 0 0 18px;padding:0;font-size:13px;color:#9aa4b2;line-height:1.8'>";
+    r.tips.forEach(function(t){ html += "<li>" + t + "</li>"; });
+    html += "</ul>";
+
+    box.className = "res " + (r.score >= 3 ? "ok" : (r.score >= 2 ? "warn" : "bad"));
+    box.innerHTML = html;
+    // 自动把结果区滚入可视区，避免被软键盘遮挡
+    setTimeout(function(){
+      try{ box.scrollIntoView({behavior:"smooth", block:"nearest"}); }catch(e){}
+    }, 60);
+  });
+
+})();
+</script>
+</body>
+</html>
